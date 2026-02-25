@@ -1,11 +1,34 @@
 esphome:
-  name: esp-uh50reader
-  platform: ESP8266
-  #board d1_mini also works (wemos d1 mini)
-  board: nodemcu 
-  includes:
-    - obis.h
-    - uh50reader.h
+  name: distric-heating
+
+esp32:
+  board: az-delivery-devkit-v4
+  framework:
+    type: arduino
+
+external_components:
+  - source:
+      type: local
+      path: ./components
+    components: [uh50_reader]
+
+# Enable logging
+logger:
+  level: DEBUG
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret district_heating_api_key
+  actions:
+    - action: start_read_meter
+      then:
+        - lambda: |-
+            id(uh50_reader_component).read_meter();
+
+ota:
+  - platform: esphome
+    password: !secret district_heating_ota_password
 
 wifi:
   ssid: !secret wifi_ssid
@@ -13,97 +36,90 @@ wifi:
 
   # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
-    ssid: "esp-uh50reader"
-    password: !secret fallback_password
-
-captive_portal:
-
-# Uncomment the following 2 lines to enable web-access to the device to view logs and update firmware
-#web_server:
-#  port: 80
-
-# Enable logging
-logger:
-  level: DEBUG
-  baud_rate: 0 #disable logging over uart
-  
-# Enable Home Assistant API
-api:
-  encryption:
-    key: !secret encryption_key
-
-ota:
-  password: !secret ota_password
+    ssid: "Distric-Heating Fallback Hotspot"
+    password: !secret district_heating_ap_password
 
 uart:
   - id: uart_in
-    rx_pin: RX
+    rx_pin: GPIO16
     baud_rate: 2400
     data_bits: 7
     parity: EVEN
     stop_bits: 2
     rx_buffer_size: 2048
   - id: uart_out
-    tx_pin: D4
+    tx_pin: GPIO17
     baud_rate: 300
     data_bits: 7
     parity: EVEN
     stop_bits: 2
-  
+
+one_wire:
+  - platform: gpio
+    pin: GPIO25
+
 sensor:
-  - platform: custom
-    lambda: |-
-      auto meter_sensor = new UH50Reader(id(uart_in), id(uart_out));
-      App.register_component(meter_sensor);
-      return {
-        meter_sensor->cumulativeActiveImport,
-        meter_sensor->cumulativeVolume,
-        meter_sensor->currentPower,
-        meter_sensor->flowRate,
-        meter_sensor->temperatureFlow,
-        meter_sensor->temperatureReturn,
-        meter_sensor->temperatureDiff
-      };
-    sensors:
-    - name: "UH50 Cumulative Active Import"
+  - platform: dallas_temp
+    address: 0xe00000005927f228
+    name: "Hot Water Temperature"
+    update_interval: 30s
+  - platform: dallas_temp
+    address: 0x100000005add1f28
+    name: "Cold Water Temperature"
+    update_interval: 30s
+
+uh50_reader:
+  id: uh50_reader_component
+  uart_in_id: uart_in
+  uart_out_id: uart_out
+  update_interval: 30min
+  sensors:
+    cumulative_active_import:
+      name: "Cumulative Active Import"
       id: "uh50_cumulative_active_import"
       unit_of_measurement: MWh
       accuracy_decimals: 3
       state_class: "total_increasing"
       device_class: "energy"
-    - name: "UH50 Cumulative Volume"
+    cumulative_volume:
+      name: "Cumulative Volume"
       id: "uh50_cumulative_volume"
       unit_of_measurement: m3
       accuracy_decimals: 3
       state_class: "total_increasing"
       device_class: "energy"
-    - name: "UH50 Current Power"
+    current_power:
+      name: "Current Power"
       id: "uh50_current_power"
       unit_of_measurement: kW
       accuracy_decimals: 2
       state_class: "measurement"
       device_class: "energy"
-    - name: "UH50 Flow Rate"
+    flow_rate:
+      name: "Flow Rate"
       id: "uh50_flow_rate"
       unit_of_measurement: m3ph
       accuracy_decimals: 3
       state_class: "measurement"
       device_class: "energy"
-    - name: "UH50 Flow Temperature"
+    temperature_flow:
+      name: "Flow Temperature"
       id: "uh50_flow_temperature"
       unit_of_measurement: C
       accuracy_decimals: 2
       state_class: "measurement"
-      device_class: "energy"
-    - name: "UH50 Return Temperature"
+      device_class: "temperature"
+    temperature_return:
+      name: "Return Temperature"
       id: "uh50_return_temperature"
       unit_of_measurement: C
       accuracy_decimals: 2
       state_class: "measurement"
-      device_class: "energy"
-    - name: "UH50 Diff Temperature"
+      device_class: "temperature"
+    temperature_diff:
+      name: "Diff Temperature"
       id: "uh50_diff_temperature"
       unit_of_measurement: C
       accuracy_decimals: 2
       state_class: "measurement"
-      device_class: "energy"
+      device_class: "temperature"

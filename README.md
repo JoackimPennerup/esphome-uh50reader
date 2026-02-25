@@ -1,8 +1,8 @@
 # esphome-uh50reader
-ESPHome custom component for communicating with Landis+Gyr T550 (UH50) heat/cold meters and reading usage data. The UH50 meter communicates over an optical interface using the standardized IEC 62056-21 protocol. If the meter is battery powered, each request for data will drain the battery life. 
+ESPHome external component for communicating with Landis+Gyr T550 (UH50) heat/cold meters and reading usage data. The UH50 meter communicates over an optical interface using the standardized IEC 62056-21 protocol. If the meter is battery powered, each request for data will drain the battery life.
 
 ## ESPHome version
-The current version in main is tested with ESPHome version `2022.12.6`. Make sure your ESPHome version is up to date if you experience compile problems.
+The current version in main targets ESPHome version `2025.2+` (after removal of custom components). Make sure your ESPHome version is up to date if you experience compile problems.
 
 ## Hardware
 The optical eye hardware I'm using was ordered as a kit from here: https://wiki.hal9k.dk/projects/kamstrup, they no longer sell kits but provide all the necessary information for printing the enclosure as well as PCB schematics and component list. This optical eye is then connected to a NodeMCU ESP-controller with the RX pin connected to the RX pin (GPIO3) on the NodeMCU and the TX pin connected to the D4 pin (GPIO2) on the NodeMCU.
@@ -40,9 +40,9 @@ You can check the logs by issuing `esphome uh50reader.yaml logs` (or use the sup
 [01:09:42][D][sensor:113]: 'Cumulative Volume': Sending state 2144.70996 m3 with 6 decimals of accuracy
 ```
 
-## Home Assistant service to call when to make a reading
+## Home Assistant action to trigger a reading
 
-This version exposes a home assistant service that you have to call either manually or through an automation when to read the meter.
+This version exposes an `api.actions` action named `start_read_meter` that you can call manually or through an automation to trigger an immediate read.
 
 ## Build and install tips for Windows
 
