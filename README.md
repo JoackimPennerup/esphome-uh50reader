@@ -4,6 +4,30 @@ ESPHome external component for communicating with Landis+Gyr T550 (UH50) heat/co
 ## ESPHome version
 The current version in main targets ESPHome version `2025.2+` (after removal of custom components). Make sure your ESPHome version is up to date if you experience compile problems.
 
+## Configuration style
+The component is exposed as an ESPHome sensor platform:
+
+```yaml
+external_components:
+  - source:
+      type: local
+      path: ./components
+    components: [uh50_reader]
+
+sensor:
+  - platform: uh50_reader
+    id: uh50_reader_component
+    uart_in_id: uart_in
+    uart_out_id: uart_out
+    update_interval: 30min
+    read_button:
+      name: "Read Meter Now"
+    cumulative_active_import:
+      name: "Cumulative Active Import"
+```
+
+All UH50 sensors are optional. Configure only the entities you need.
+
 ## Hardware
 The optical eye hardware I'm using was ordered as a kit from here: https://wiki.hal9k.dk/projects/kamstrup, they no longer sell kits but provide all the necessary information for printing the enclosure as well as PCB schematics and component list. This optical eye is then connected to a NodeMCU ESP-controller with the RX pin connected to the RX pin (GPIO3) on the NodeMCU and the TX pin connected to the D4 pin (GPIO2) on the NodeMCU.
 
@@ -42,7 +66,33 @@ You can check the logs by issuing `esphome uh50reader.yaml logs` (or use the sup
 
 ## Home Assistant action to trigger a reading
 
-This version exposes an `api.actions` action named `start_read_meter` that you can call manually or through an automation to trigger an immediate read.
+This version exposes a native ESPHome action named `uh50_reader.read`.
+
+Example automation snippet:
+```yaml
+on_...:
+  then:
+    - uh50_reader.read:
+        id: uh50_reader_component
+```
+
+You can also configure `read_button:` in the component to expose a button entity in Home Assistant.
+
+## Migration from previous schema
+
+The previous top-level block:
+```yaml
+uh50_reader:
+  ...
+```
+has been replaced with:
+```yaml
+sensor:
+  - platform: uh50_reader
+    ...
+```
+
+The previous `api.actions` lambda wrapper is no longer required.
 
 ## Build and install tips for Windows
 

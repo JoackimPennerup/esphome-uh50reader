@@ -1,4 +1,6 @@
 
+#pragma once
+
 /* 
 Adapted code based on response from VS Code Copilot 20241020.
 Prompt "Give a code example for esphome to parse obis
@@ -24,7 +26,7 @@ typedef struct {
     char name[MAX_NAME_LENGTH];
 } OBISDictionary;
 
-OBISDictionary obis_dict[] = {
+static const OBISDictionary obis_dict[] = {
         {"6.8", "Cumulative Energy (MWh)"},
         {"6.26", "Cumulative Volume (m3)"},
         {"9.21", "Serial Number"},
@@ -62,7 +64,7 @@ OBISDictionary obis_dict[] = {
         {"6.8.5*01", "Energy Phase 5 (Tariff 1)"},
     };
 
-const char* get_obis_name(const char* obis_code) {
+inline const char* get_obis_name(const char* obis_code) {
     for (int i = 0; i < sizeof(obis_dict) / sizeof(obis_dict[0]); i++) {
         if (strcmp(obis_dict[i].obis_code, obis_code) == 0) {
             return obis_dict[i].name;
@@ -71,7 +73,7 @@ const char* get_obis_name(const char* obis_code) {
     return "Unknown";
 }
 
-void parse_obis(const char* obis_string, OBISData* parsed_data, int* parsed_count) {
+inline void parse_obis(const char* obis_string, OBISData* parsed_data, int* parsed_count) {
     const char* ptr = obis_string;
     *parsed_count = 0;
 
@@ -106,7 +108,7 @@ void parse_obis(const char* obis_string, OBISData* parsed_data, int* parsed_coun
     }
 }
 
-void print_parsed_data(const OBISData* parsed_data, int parsed_count) {
+inline void print_parsed_data(const OBISData* parsed_data, int parsed_count) {
     for (int i = 0; i < parsed_count; i++) {
         ESP_LOGD("OBIS", "OBIS Code: %s", parsed_data[i].obis_code);
         ESP_LOGD("OBIS", "Name: %s", parsed_data[i].name);

@@ -20,11 +20,6 @@ logger:
 api:
   encryption:
     key: !secret district_heating_api_key
-  actions:
-    - action: start_read_meter
-      then:
-        - lambda: |-
-            id(uh50_reader_component).read_meter();
 
 ota:
   - platform: esphome
@@ -33,11 +28,6 @@ ota:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
-
-  # Enable fallback hotspot (captive portal) in case wifi connection fails
-  ap:
-    ssid: "Distric-Heating Fallback Hotspot"
-    password: !secret district_heating_ap_password
 
 uart:
   - id: uart_in
@@ -68,12 +58,13 @@ sensor:
     name: "Cold Water Temperature"
     update_interval: 30s
 
-uh50_reader:
-  id: uh50_reader_component
-  uart_in_id: uart_in
-  uart_out_id: uart_out
-  update_interval: 30min
-  sensors:
+  - platform: uh50_reader
+    id: uh50_reader_component
+    uart_in_id: uart_in
+    uart_out_id: uart_out
+    update_interval: 1min
+    read_button:
+      name: "Read Meter Now"
     cumulative_active_import:
       name: "Cumulative Active Import"
       id: "uh50_cumulative_active_import"
