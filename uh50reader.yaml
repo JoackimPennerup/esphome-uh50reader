@@ -63,6 +63,7 @@ sensor:
     uart_in_id: uart_in
     uart_out_id: uart_out
     update_interval: 1min
+    startup_read_delay: 60s
     read_button:
       name: "Read Meter Now"
     cumulative_active_import:

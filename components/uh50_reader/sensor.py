@@ -26,6 +26,7 @@ CONF_TEMPERATURE_FLOW = "temperature_flow"
 CONF_TEMPERATURE_RETURN = "temperature_return"
 CONF_TEMPERATURE_DIFF = "temperature_diff"
 CONF_READ_BUTTON = "read_button"
+CONF_STARTUP_READ_DELAY = "startup_read_delay"
 
 UH50ReadAction = uh50_reader_ns.class_("UH50ReadAction", automation.Action)
 UH50ReadButton = uh50_reader_ns.class_("UH50ReadButton", button.Button)
@@ -59,6 +60,7 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Required(CONF_UART_IN_ID): cv.use_id(uart.UARTComponent),
         cv.Required(CONF_UART_OUT_ID): cv.use_id(uart.UARTComponent),
         cv.Optional(CONF_READ_BUTTON): button.button_schema(UH50ReadButton, icon="mdi:gauge"),
+        cv.Optional(CONF_STARTUP_READ_DELAY, default="60s"): cv.positive_time_period_milliseconds,
         cv.Optional(CONF_CUMULATIVE_ACTIVE_IMPORT): ENERGY_SENSOR_SCHEMA,
         cv.Optional(CONF_CUMULATIVE_VOLUME): sensor.sensor_schema(
             accuracy_decimals=3,
@@ -96,6 +98,7 @@ async def to_code(config):
 
     var = cg.new_Pvariable(config[CONF_ID], uart_in, config[CONF_UPDATE_INTERVAL])
     cg.add(var.set_uart_out(uart_out))
+    cg.add(var.set_startup_read_delay_ms(config[CONF_STARTUP_READ_DELAY]))
 
     await cg.register_component(var, config)
 

@@ -20,6 +20,7 @@ sensor:
     uart_in_id: uart_in
     uart_out_id: uart_out
     update_interval: 30min
+    startup_read_delay: 60s
     read_button:
       name: "Read Meter Now"
     cumulative_active_import:
@@ -27,6 +28,7 @@ sensor:
 ```
 
 All UH50 sensors are optional. Configure only the entities you need.
+`update_interval` controls the recurring polling interval. `startup_read_delay` controls the first delayed read after boot and defaults to `60s`.
 
 ## Hardware
 The optical eye hardware I'm using was ordered as a kit from here: https://wiki.hal9k.dk/projects/kamstrup, they no longer sell kits but provide all the necessary information for printing the enclosure as well as PCB schematics and component list. This optical eye is then connected to a NodeMCU ESP-controller with the RX pin connected to the RX pin (GPIO3) on the NodeMCU and the TX pin connected to the D4 pin (GPIO2) on the NodeMCU.
