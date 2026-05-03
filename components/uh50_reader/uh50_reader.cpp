@@ -1,7 +1,6 @@
 #include "uh50_reader.h"
 
 #include <cstdlib>
-#include <cstring>
 
 #include "esphome/core/log.h"
 
@@ -16,7 +15,7 @@ static const uint8_t DATA_CMD[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, '/', '#', '!', 0x0D, 0x0A,
 };
 
-static const uint32_t START_TIMEOUT_MS = 3000;
+static const uint32_t START_TIMEOUT_MS = 5000;
 static const uint32_t FRAME_TIMEOUT_MS = 6000;
 static const uint32_t INTERBYTE_TIMEOUT_MS = 200;
 
@@ -24,15 +23,31 @@ UH50Reader::UH50Reader(uart::UARTComponent *uart_in, uint32_t update_interval_ms
     : PollingComponent(update_interval_ms), UARTDevice(uart_in) {}
 
 void UH50Reader::setup() {
-  this->send_data_cmd_();
-  this->set_timeout(60000, [this]() { this->read_meter(); });
+  this->set_timeout(this->startup_read_delay_ms_, [this]() { this->request_read_(); });
 }
 
-void UH50Reader::update() { this->read_meter(); }
+void UH50Reader::update() { this->request_read_(); }
+
+void UH50Reader::loop() {
+  switch (this->read_state_) {
+    case ReadState::IDLE:
+      if (this->read_requested_) {
+        this->start_read_();
+      }
+      break;
+    case ReadState::WAITING_FOR_STX:
+      this->process_waiting_for_stx_();
+      break;
+    case ReadState::READING_FRAME:
+      this->process_reading_frame_();
+      break;
+  }
+}
 
 void UH50Reader::dump_config() {
   ESP_LOGCONFIG(TAG, "UH50 Reader:");
   ESP_LOGCONFIG(TAG, "  Update interval: %u ms", this->get_update_interval());
+  ESP_LOGCONFIG(TAG, "  Startup read delay: %u ms", this->startup_read_delay_ms_);
   ESP_LOGCONFIG(TAG, "  Read button: %s", this->has_read_button_ ? "enabled" : "disabled");
   ESP_LOGCONFIG(TAG, "  TX UART configured: %s", this->uart_out_ != nullptr ? "yes" : "no");
 
@@ -47,21 +62,43 @@ void UH50Reader::dump_config() {
 
 float UH50Reader::get_setup_priority() const { return setup_priority::DATA; }
 
-void UH50Reader::read_meter() {
-  this->send_data_cmd_();
-  this->read_telegram_();
-}
+void UH50Reader::read_meter() { this->request_read_(); }
 
-void UH50Reader::send_data_cmd_() {
-  if (this->uart_out_ == nullptr) {
-    ESP_LOGW(TAG, "TX UART not configured, cannot send data command");
+void UH50Reader::request_read_() {
+  if (this->read_requested_ || this->read_state_ != ReadState::IDLE) {
+    ESP_LOGD(TAG, "Read request ignored because a transaction is already in progress");
     return;
   }
 
+  this->read_requested_ = true;
+}
+
+void UH50Reader::start_read_() {
+  if (this->uart_out_ == nullptr) {
+    ESP_LOGW(TAG, "TX UART not configured, cannot send data command");
+    this->read_requested_ = false;
+    return;
+  }
+
+  while (this->available()) {
+    this->read();
+  }
+
+  this->buffer_pos_ = 0;
+  this->buffer_[0] = '\0';
+  this->read_requested_ = false;
+  this->read_state_ = ReadState::WAITING_FOR_STX;
+  this->read_started_at_ = millis();
+  this->frame_started_at_ = 0;
+  this->last_byte_at_ = this->read_started_at_;
+
+  this->send_data_cmd_();
+}
+
+void UH50Reader::send_data_cmd_() {
   for (auto b : DATA_CMD) {
     this->uart_out_->write_byte(b);
   }
-  this->uart_out_->flush();
   ESP_LOGI(TAG, "data cmd sent");
 }
 
@@ -85,52 +122,66 @@ void UH50Reader::publish_sensors_(OBISData *od, int count) {
   }
 }
 
-void UH50Reader::read_telegram_() {
-  OBISData obis_data[MAX_OBIS_CODES];
+void UH50Reader::reset_read_state_() {
+  this->read_state_ = ReadState::IDLE;
+  this->buffer_pos_ = 0;
+  this->buffer_[0] = '\0';
+  this->read_started_at_ = 0;
+  this->frame_started_at_ = 0;
+  this->last_byte_at_ = 0;
+}
 
-  bool found_stx = false;
-  uint32_t start = millis();
-  while (millis() - start < START_TIMEOUT_MS) {
-    if (this->available()) {
-      const uint8_t b = this->read();
-      if (b == 0x02) {
-        found_stx = true;
-        break;
-      }
+void UH50Reader::process_waiting_for_stx_() {
+  while (this->available()) {
+    if (this->read() == 0x02) {
+      this->read_state_ = ReadState::READING_FRAME;
+      this->frame_started_at_ = millis();
+      this->last_byte_at_ = this->frame_started_at_;
+      return;
     }
-    yield();
   }
 
-  if (!found_stx) {
+  if (millis() - this->read_started_at_ >= START_TIMEOUT_MS) {
     ESP_LOGW(TAG, "Timed out waiting for STX");
-    return;
+    this->reset_read_state_();
   }
+}
 
-  size_t pos = 0;
-  const uint32_t read_start = millis();
-  uint32_t last_byte = millis();
-
-  while (millis() - read_start < FRAME_TIMEOUT_MS && pos < sizeof(this->buffer_) - 1) {
-    if (this->available()) {
-      this->buffer_[pos++] = static_cast<char>(this->read());
-      last_byte = millis();
-      continue;
+void UH50Reader::process_reading_frame_() {
+  while (this->available()) {
+    const uint8_t b = this->read();
+    if (b == 0x03) {
+      this->finish_read_();
+      return;
     }
 
-    if (millis() - last_byte > INTERBYTE_TIMEOUT_MS) {
-      break;
+    if (this->buffer_pos_ >= sizeof(this->buffer_) - 1) {
+      ESP_LOGW(TAG, "Telegram exceeded buffer size, truncating");
+      this->finish_read_();
+      return;
     }
-    yield();
+
+    this->buffer_[this->buffer_pos_++] = static_cast<char>(b);
+    this->last_byte_at_ = millis();
   }
 
-  if (pos == 0) {
+  if (millis() - this->frame_started_at_ >= FRAME_TIMEOUT_MS ||
+      millis() - this->last_byte_at_ > INTERBYTE_TIMEOUT_MS) {
+    this->finish_read_();
+  }
+}
+
+void UH50Reader::finish_read_() {
+  if (this->buffer_pos_ == 0) {
     ESP_LOGW(TAG, "No payload received after STX");
+    this->reset_read_state_();
     return;
   }
 
-  this->buffer_[pos] = '\0';
-  ESP_LOGD(TAG, "Read %u bytes", static_cast<unsigned>(pos));
+  this->buffer_[this->buffer_pos_] = '\0';
+  ESP_LOGD(TAG, "Read %u bytes", static_cast<unsigned>(this->buffer_pos_));
 
+  OBISData obis_data[MAX_OBIS_CODES];
   int count = 0;
   parse_obis(this->buffer_, obis_data, &count);
   if (count == 0) {
@@ -139,7 +190,7 @@ void UH50Reader::read_telegram_() {
 
   print_parsed_data(obis_data, count);
   this->publish_sensors_(obis_data, count);
-  memset(this->buffer_, 0, sizeof(this->buffer_));
+  this->reset_read_state_();
 }
 
 }  // namespace uh50_reader

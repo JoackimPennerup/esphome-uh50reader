@@ -16,6 +16,7 @@ class UH50Reader : public PollingComponent, public uart::UARTDevice {
 
   void set_uart_out(uart::UARTComponent *uart_out) { uart_out_ = uart_out; }
   void set_has_read_button(bool has_read_button) { has_read_button_ = has_read_button; }
+  void set_startup_read_delay_ms(uint32_t startup_read_delay_ms) { startup_read_delay_ms_ = startup_read_delay_ms; }
 
   void set_cumulative_active_import_sensor(sensor::Sensor *sensor) { cumulative_active_import_sensor_ = sensor; }
   void set_cumulative_volume_sensor(sensor::Sensor *sensor) { cumulative_volume_sensor_ = sensor; }
@@ -27,19 +28,38 @@ class UH50Reader : public PollingComponent, public uart::UARTDevice {
 
   void setup() override;
   void update() override;
+  void loop() override;
   void dump_config() override;
   float get_setup_priority() const override;
 
   void read_meter();
 
  protected:
+  enum class ReadState : uint8_t {
+    IDLE,
+    WAITING_FOR_STX,
+    READING_FRAME,
+  };
+
+  void request_read_();
+  void start_read_();
+  void reset_read_state_();
+  void finish_read_();
+  void process_waiting_for_stx_();
+  void process_reading_frame_();
   void send_data_cmd_();
-  void read_telegram_();
   void publish_sensors_(OBISData *od, int count);
 
   uart::UARTComponent *uart_out_{nullptr};
   bool has_read_button_{false};
+  uint32_t startup_read_delay_ms_{60000};
   char buffer_[2500]{0};
+  size_t buffer_pos_{0};
+  ReadState read_state_{ReadState::IDLE};
+  bool read_requested_{false};
+  uint32_t read_started_at_{0};
+  uint32_t frame_started_at_{0};
+  uint32_t last_byte_at_{0};
 
   sensor::Sensor *cumulative_active_import_sensor_{nullptr};
   sensor::Sensor *cumulative_volume_sensor_{nullptr};
