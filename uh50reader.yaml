@@ -23,7 +23,7 @@ api:
 
 ota:
   - platform: esphome
-    password: !secret district_heating_ota_password
+    encryption:
 
 wifi:
   ssid: !secret wifi_ssid

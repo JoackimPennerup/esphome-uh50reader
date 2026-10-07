@@ -85,6 +85,7 @@ UH50_READ_ACTION_SCHEMA = cv.Schema(
     "uh50_reader.read",
     UH50ReadAction,
     UH50_READ_ACTION_SCHEMA,
+    synchronous=True,
 )
 async def uh50_read_to_code(config, action_id, template_arg, args):
     var = cg.new_Pvariable(action_id, template_arg)
